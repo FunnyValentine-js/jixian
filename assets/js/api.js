@@ -8,14 +8,24 @@
 
 	// 固定 Authorization 令牌（按需修改）
 	const FIXED_AUTHORIZATION = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ1c2VyIjoxOTg3ODMyNTc0ODU4ODMzOTIxLCJleHAiOjE3NjI5MzI5MjV9.mz9ftOV2odBr5vH4HwlUZehyiELwvHra-1MsMmGZYf3ChU1ecqgsOYUKAsui6zl5d2IRnKm1doc9rKbMfrV5onHS8I0iPMJvzYqWOS2FXDauytTYZyoXjkQugsAp07MnBh9ZawV4eceMi_ltbhHVlT437Or5cqi_WFMjC3W28lhQTNWtek8WpmMxPMMrJjnkCgTSFQsTFWikW3GKBWxYemhDDS4CqbkqBed9OXcGeFtUwijETZJjSKqqgLrnraHPaXVX1m1iQGKMma9gV8bLwN1iqExyWiNh-fxjyYy5bzbuV8uNVD2TIqD9o90ThGX82xyePMKNPx3oTzwrBJXxFg';
+
+	// 统一持久化 token（localStorage + cookie）
+	function persistToken(token){
+		if (!token) return;
+		try{
+			localStorage.setItem('API_TOKEN', token);
+			// 简单设为 Lax，若需要跨站可改为 None; Secure（需 HTTPS）
+			document.cookie = `API_TOKEN=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+		}catch(e){}
+	}
+
 	function getAuthHeaders(){
-		// 若需要改为从 localStorage 读取，请注释下一行并恢复后续逻辑
-		return { Authorization: FIXED_AUTHORIZATION };
-		// try{
-		// 	const t = localStorage.getItem('API_TOKEN');
-		// 	if (t) return { Authorization: t.startsWith('Bearer ') ? t : `Bearer ${t}` };
-		// }catch(e){}
-		// return {};
+		// 动态从本地读取 token（推荐）
+		try{
+			const t = localStorage.getItem('API_TOKEN');
+			if (t) return { Authorization: t.startsWith('Bearer ') ? t : `Bearer ${t}` };
+		}catch(e){}
+		return {};
 	}
 
 	async function request(url, { method='GET', data, headers } = {}){
@@ -38,10 +48,10 @@
 			console.error('API error:', err);
 			throw new Error('网络请求失败，可能是跨域或网络不可达（请使用本地服务器打开前端，或在后端开启 CORS 并允许来源）');
 		}
-		// 尝试从响应头/体捕获并保存 Token（如果后端提供）
+		// 尝试从响应头捕获并保存 Token（如果后端提供）
 		try{
-			const hAuth = res.headers.get('authorization') || res.headers.get('Authorization');
-			if (hAuth) localStorage.setItem('API_TOKEN', hAuth);
+			const hAuth = res.headers.get('authorization') || res.headers.get('Authorization') || res.headers.get('x-auth-token') || res.headers.get('X-Auth-Token');
+			if (hAuth) persistToken(hAuth);
 		}catch(e){}
 		const contentType = res.headers.get('content-type') || '';
 		let payload = null;
@@ -58,7 +68,7 @@
 			// 如果 body 中返回 token，也记录
 			try{
 				const maybeToken = payload?.data?.token || payload?.token;
-				if (maybeToken) localStorage.setItem('API_TOKEN', maybeToken);
+				if (maybeToken) persistToken(maybeToken);
 			}catch(e){}
 			// 某些文档示例 code=0 但 msg=异常，这里做宽松判断：有 data 则认为成功
 			if (payload.data !== undefined) return payload;
@@ -177,8 +187,8 @@
 		},
 		get token(){ return localStorage.getItem('API_TOKEN')||''; },
 		setToken(tok){
-			if (tok) localStorage.setItem('API_TOKEN', tok);
-			else localStorage.removeItem('API_TOKEN');
+			if (tok) persistToken(tok);
+			else { localStorage.removeItem('API_TOKEN'); document.cookie = 'API_TOKEN=; Max-Age=0; path=/'; }
 		},
 		clearToken(){ localStorage.removeItem('API_TOKEN'); },
 		pingEcho(message='ping'){
