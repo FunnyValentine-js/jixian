@@ -48,6 +48,7 @@ window.PageUser = {
 		const selFuel = new Set((consult.preferredFuelType||'').split(',').filter(Boolean));
 		const selBrand = new Set((consult.preferredBrand||'').split(',').filter(Boolean));
 		const selModel = new Set((consult.preferredCarModel||'').split(',').filter(Boolean));
+		const toAttr = (set)=> Array.from(set).join(',');
 		return `
 		<div class="my-4">
 			<h1 class="h4 mb-3">个人中心</h1>
@@ -92,7 +93,7 @@ window.PageUser = {
 										</div>
 										<div class="col-md-6">
 											<label class="form-label">主要使用场景（可多选）</label>
-											<div class="table-card p-2" id="pickerUse">
+											<div class="table-card p-2" id="pickerUse" data-init="${toAttr(selUse)}">
 												<div class="d-flex flex-wrap gap-2 mb-2" data-selected></div>
 												<input type="text" class="form-control form-control-sm" data-input placeholder="输入后回车以添加，或选择推荐项">
 												<div class="d-flex flex-wrap gap-2 mt-2" data-suggest>
@@ -102,7 +103,7 @@ window.PageUser = {
 										</div>
 										<div class="col-md-6">
 											<label class="form-label">燃料类型偏好（可多选）</label>
-											<div class="table-card p-2" id="pickerFuel">
+											<div class="table-card p-2" id="pickerFuel" data-init="${toAttr(selFuel)}">
 												<div class="d-flex flex-wrap gap-2 mb-2" data-selected></div>
 												<input type="text" class="form-control form-control-sm" data-input placeholder="输入后回车以添加，或选择推荐项">
 												<div class="d-flex flex-wrap gap-2 mt-2" data-suggest>
@@ -112,7 +113,7 @@ window.PageUser = {
 										</div>
 										<div class="col-md-6">
 											<label class="form-label">品牌偏好（可多选）</label>
-											<div class="table-card p-2" id="pickerBrand">
+											<div class="table-card p-2" id="pickerBrand" data-init="${toAttr(selBrand)}">
 												<div class="d-flex flex-wrap gap-2 mb-2" data-selected></div>
 												<input type="text" class="form-control form-control-sm" data-input placeholder="输入后回车以添加，或选择推荐项">
 												<div class="d-flex flex-wrap gap-2 mt-2" data-suggest>
@@ -122,7 +123,7 @@ window.PageUser = {
 										</div>
 										<div class="col-md-6">
 											<label class="form-label">车型偏好（可多选）</label>
-											<div class="table-card p-2" id="pickerModel">
+											<div class="table-card p-2" id="pickerModel" data-init="${toAttr(selModel)}">
 												<div class="d-flex flex-wrap gap-2 mb-2" data-selected></div>
 												<input type="text" class="form-control form-control-sm" data-input placeholder="输入后回车以添加，或选择推荐项">
 												<div class="d-flex flex-wrap gap-2 mt-2" data-suggest>
@@ -204,12 +205,13 @@ window.PageUser = {
 	},
 	mount(root){
 		// Tag Picker 交互（参考 way.txt：推荐 + 手工输入 + 删除）
-		function setupTagPicker(boxId, { preset=[], selected=[], limit=5 }){
+		function setupTagPicker(boxId, { limit=5 }){
 			const box = root.querySelector(boxId);
 			if (!box) return;
 			const selWrap = box.querySelector('[data-selected]');
 			const input = box.querySelector('[data-input]');
 			const suggest = box.querySelectorAll('[data-s]');
+			const initial = (box.dataset.init||'').split(',').map(x=>x.trim()).filter(Boolean);
 
 			function renderChip(val){
 				const span = document.createElement('span');
@@ -231,7 +233,7 @@ window.PageUser = {
 				selWrap.appendChild(renderChip(val));
 			}
 			// 初始已选
-			selected.forEach(v=> addTag(v));
+			initial.forEach(v=> addTag(v));
 			// 推荐点击
 			suggest.forEach(s=> s.addEventListener('click', ()=> addTag(s.getAttribute('data-s')) ));
 			// 输入回车添加
@@ -245,31 +247,10 @@ window.PageUser = {
 		}
 
 		// 初始化各 Tag Picker
-		setupTagPicker('#pickerUse',  { preset: [], selected: (root.querySelector('#pickerUse')?[]:[]),  limit: 5 });
-		setupTagPicker('#pickerFuel', { preset: [], selected: [], limit: 3 });
-		setupTagPicker('#pickerBrand',{ preset: [], selected: [], limit: 6 });
-		setupTagPicker('#pickerModel',{ preset: [], selected: [], limit: 4 });
-		// 回填已选
-		(function backfill(){
-			const fill = (boxId, values)=>{
-				const box = root.querySelector(boxId);
-				if (!box) return;
-				const selWrap = box.querySelector('[data-selected]');
-				values.forEach(v=>{
-					if (!v) return;
-					const span = document.createElement('span');
-					span.className = 'chip';
-					span.setAttribute('data-tag', v);
-					span.innerHTML = `${v} <span aria-label="删除" role="button" class="ms-1">×</span>`;
-					span.querySelector('span').addEventListener('click', ()=> span.remove());
-					selWrap.appendChild(span);
-				});
-			};
-			fill('#pickerUse',  (root.__useSelected || []).length ? root.__useSelected : []);
-			fill('#pickerFuel', (root.__fuelSelected|| []).length ? root.__fuelSelected: []);
-			fill('#pickerBrand',(root.__brandSelected||[]).length ? root.__brandSelected:[]);
-			fill('#pickerModel',(root.__modelSelected||[]).length ? root.__modelSelected:[]);
-		})();
+		setupTagPicker('#pickerUse',  { limit: 5 });
+		setupTagPicker('#pickerFuel', { limit: 3 });
+		setupTagPicker('#pickerBrand',{ limit: 6 });
+		setupTagPicker('#pickerModel',{ limit: 4 });
 
 		root.querySelector('#saveProfile')?.addEventListener('click', ()=>{
 			const name = root.querySelector('#pName').value.trim();

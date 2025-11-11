@@ -3,8 +3,20 @@
 	// 允许通过 window.API_BASE 或 localStorage.API_BASE 覆盖后端地址
 	const DEFAULT_BASE = 'http://47.96.191.232:80/api';
 	const BASE = (global.API_BASE || localStorage.getItem('API_BASE') || DEFAULT_BASE).replace(/\/+$/,'');
-	// file:// 环境多数服务端不会允许携带 cookie，默认不带；同源/部署环境允许携带
-	const USE_CREDENTIALS = location.protocol !== 'file:';
+	// 始终携带 Cookie，确保会话能建立（需要后端允许 CORS 且 Allow-Credentials=true）
+	const USE_CREDENTIALS = true;
+
+	// 固定 Authorization 令牌（按需修改）
+	const FIXED_AUTHORIZATION = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ1c2VyIjoxOTg3ODMyNTc0ODU4ODMzOTIxLCJleHAiOjE3NjI5MzI5MjV9.mz9ftOV2odBr5vH4HwlUZehyiELwvHra-1MsMmGZYf3ChU1ecqgsOYUKAsui6zl5d2IRnKm1doc9rKbMfrV5onHS8I0iPMJvzYqWOS2FXDauytTYZyoXjkQugsAp07MnBh9ZawV4eceMi_ltbhHVlT437Or5cqi_WFMjC3W28lhQTNWtek8WpmMxPMMrJjnkCgTSFQsTFWikW3GKBWxYemhDDS4CqbkqBed9OXcGeFtUwijETZJjSKqqgLrnraHPaXVX1m1iQGKMma9gV8bLwN1iqExyWiNh-fxjyYy5bzbuV8uNVD2TIqD9o90ThGX82xyePMKNPx3oTzwrBJXxFg';
+	function getAuthHeaders(){
+		// 若需要改为从 localStorage 读取，请注释下一行并恢复后续逻辑
+		return { Authorization: FIXED_AUTHORIZATION };
+		// try{
+		// 	const t = localStorage.getItem('API_TOKEN');
+		// 	if (t) return { Authorization: t.startsWith('Bearer ') ? t : `Bearer ${t}` };
+		// }catch(e){}
+		// return {};
+	}
 
 	async function request(url, { method='GET', data, headers } = {}){
 		const opts = {
@@ -12,6 +24,7 @@
 			headers: {
 				'Accept': '*/*',
 				...(data ? { 'Content-Type': 'application/json' } : {}),
+				...getAuthHeaders(),
 				...headers
 			},
 			body: data ? JSON.stringify(data) : undefined,
@@ -25,6 +38,11 @@
 			console.error('API error:', err);
 			throw new Error('网络请求失败，可能是跨域或网络不可达（请使用本地服务器打开前端，或在后端开启 CORS 并允许来源）');
 		}
+		// 尝试从响应头/体捕获并保存 Token（如果后端提供）
+		try{
+			const hAuth = res.headers.get('authorization') || res.headers.get('Authorization');
+			if (hAuth) localStorage.setItem('API_TOKEN', hAuth);
+		}catch(e){}
 		const contentType = res.headers.get('content-type') || '';
 		let payload = null;
 		try{
@@ -37,6 +55,11 @@
 		}
 		// 默认返回结构 { code, data, msg }
 		if (payload && typeof payload === 'object' && ('code' in payload || 'data' in payload || 'msg' in payload)){
+			// 如果 body 中返回 token，也记录
+			try{
+				const maybeToken = payload?.data?.token || payload?.token;
+				if (maybeToken) localStorage.setItem('API_TOKEN', maybeToken);
+			}catch(e){}
 			// 某些文档示例 code=0 但 msg=异常，这里做宽松判断：有 data 则认为成功
 			if (payload.data !== undefined) return payload;
 			// 无 data 则也返回原始，交由上层判断
@@ -56,7 +79,11 @@
 			getById: (id)=> request(`${BASE}/user/${id}`)
 		},
 		robot: {
-			chat: (message)=> request(`${BASE}/robot/chat`, { method:'POST', data: { message } }),
+			chat: (model='deepseek', message)=>{
+				const path = model === 'qwen' ? '/robot/chat/qwen' : '/robot/chat/deepseek';
+				const payload = typeof message === 'string' ? { message } : (message||{});
+				return request(`${BASE}${path}`, { method:'POST', data: payload });
+			},
 			historyMe: ({ limit, page, timeFrom, timeTo }={})=>{
 				const q = [];
 				if (limit!=null) q.push(`limit=${limit}`);
@@ -148,6 +175,12 @@
 				location.reload();
 			}
 		},
+		get token(){ return localStorage.getItem('API_TOKEN')||''; },
+		setToken(tok){
+			if (tok) localStorage.setItem('API_TOKEN', tok);
+			else localStorage.removeItem('API_TOKEN');
+		},
+		clearToken(){ localStorage.removeItem('API_TOKEN'); },
 		pingEcho(message='ping'){
 			return request(`${BASE}/hello/echo/${encodeURIComponent(message)}`);
 		}

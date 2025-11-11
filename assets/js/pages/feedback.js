@@ -48,6 +48,14 @@ window.PageFeedback = {
 			if (!form.checkValidity()) return;
 			const text = ta.value.trim();
 			if (!text) return;
+			// 反馈需登录：尝试刷新登录态
+			await App.refreshUser?.();
+			if (!App.state.user){
+				App.showToast('请先登录后再提交反馈','warning');
+				sessionStorage.setItem('redirect_after_login', '#/feedback');
+				location.hash = '#/login';
+				return;
+			}
 			btn.disabled = true;
 			App.showToast('正在提交反馈...','warning');
 			const r = await API.safe(API.feedback.submit, text);
@@ -57,7 +65,14 @@ window.PageFeedback = {
 				// 刷新积分（若登录）
 				await App.refreshUser?.();
 			}else{
-				App.showToast(r.msg || '提交失败','danger');
+				// 针对 401 的特殊提示
+				if ((r.msg||'').includes('401') || (r.msg||'').toLowerCase().includes('unauthorized')){
+					App.showToast('未登录或会话已过期，请重新登录','danger');
+					sessionStorage.setItem('redirect_after_login', '#/feedback');
+					location.hash = '#/login';
+				}else{
+					App.showToast(r.msg || '提交失败','danger');
+				}
 			}
 			btn.disabled = false;
 		});

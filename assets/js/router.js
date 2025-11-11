@@ -20,8 +20,8 @@
 	}
 
 	async function guard(path){
-		// 暂时允许未登录直接访问管理员页面以便联调 UI
-		const loginRequired = ['/user','/points','/feedback'];
+		// 需要登录的页面
+		const loginRequired = ['/user','/points','/feedback','/admin'];
 		if (loginRequired.includes(path)){
 			if (!isAuthed()){
 				await App.refreshUser?.();
@@ -32,7 +32,17 @@
 				return false;
 			}
 		}
-		// 管理员验证暂时跳过，后续再开启
+		// 管理员权限：/user/me 获取的 role 必须为 0
+		if (path === '/admin'){
+			await App.refreshUser?.();
+			const role = App.state.user?.role;
+			const isRoot = role === 0 || role === '0';
+			if (!isRoot){
+				App.showToast('无权限访问管理员页面','danger');
+				location.replace('#/home');
+				return false;
+			}
+		}
 		return true;
 	}
 

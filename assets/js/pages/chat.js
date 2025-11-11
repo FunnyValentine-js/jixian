@@ -6,13 +6,10 @@ window.PageChat = {
 				<h1 class="h4 mb-0">智能对话</h1>
 				<div class="d-flex align-items-center gap-2">
 					<select class="form-select form-select-sm" id="modelSelect" style="width:auto">
-						<option value="general">通用</option>
-						<option value="reasoning">推理</option>
-						<option value="code">代码</option>
-						<option value="economy">经济型</option>
+						<option value="deepseek">DeepSeek</option>
+						<option value="qwen">Qwen</option>
 					</select>
-					<span class="toolbar-badge small" id="modelBadge">模型：通用</span>
-					<span class="toolbar-badge small">BASE：${API.BASE}</span>
+					<span class="toolbar-badge small" id="modelBadge">模型：DeepSeek</span>
 				</div>
 			</div>
 			<div class="row g-3">
@@ -57,7 +54,7 @@ window.PageChat = {
 
 		let isGenerating = false;
 		let stopRequested = false;
-		let currentModel = localStorage.getItem('chat_model') || 'general';
+		let currentModel = localStorage.getItem('chat_model') || 'deepseek';
 		modelSelect.value = currentModel;
 		modelBadge.textContent = `模型：${modelSelect.selectedOptions[0].textContent}`;
 		modelSelect.addEventListener('change', ()=>{
@@ -229,7 +226,7 @@ window.PageChat = {
 			stopRequested = false;
 
 			// 发起对话，获取 chatId
-			const start = await API.safe(API.robot.chat, message);
+			const start = await API.safe(API.robot.chat, currentModel, message);
 			if (!start.ok){
 				App.showToast(start.msg || '提问失败','danger');
 				setBusy(false);
