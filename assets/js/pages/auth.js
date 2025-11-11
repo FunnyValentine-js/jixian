@@ -90,18 +90,14 @@ window.PageAuth = {
 									</div>
 									<div class="col-md-6">
 										<div class="input-group">
-											<label class="input-group-text" for="rCc">+区号</label>
-											<select class="form-select" id="rCc" aria-label="国家代码">
+											<select class="form-select flex-shrink-0" id="rCc" aria-label="国家代码" style="max-width: 90px">
 												<option selected value="+86">+86</option>
 												<option value="+852">+852</option>
 												<option value="+853">+853</option>
 												<option value="+886">+886</option>
 											</select>
-											<div class="form-floating">
-												<input type="tel" class="form-control" id="rPhone" placeholder="手机号" required pattern="\\d{6,}">
-												<label for="rPhone">手机号</label>
-												<div class="invalid-feedback">请输入正确的手机号</div>
-											</div>
+											<input type="tel" class="form-control flex-fill" id="rPhone" placeholder="手机号" required pattern="\\d{6,}">
+											<div class="invalid-feedback">请输入正确的手机号</div>
 										</div>
 									</div>
 									<div class="col-md-6">
@@ -109,25 +105,6 @@ window.PageAuth = {
 											<input type="password" class="form-control" id="rPwd" placeholder="密码" required minlength="6">
 											<label for="rPwd">密码</label>
 											<div class="invalid-feedback">至少6位密码</div>
-										</div>
-									</div>
-									<div class="col-md-6">
-										<label class="form-label">购车预算（万元）</label>
-										<div class="d-flex align-items-center gap-2">
-											<input type="range" class="form-range" id="rBudget" min="5" max="100" step="1" value="20" aria-label="购车预算">
-											<span id="rBudgetVal" class="badge text-bg-primary">20</span>
-										</div>
-									</div>
-									<div class="col-12">
-										<label class="form-label">偏好车型</label>
-										<div class="row g-2">
-											${['轿车','SUV','MPV','新能源','跑车'].map((x,i)=>`
-											<div class="col-6 col-md-3">
-												<div class="form-check">
-													<input class="form-check-input" type="checkbox" value="${x}" id="pref${i}">
-													<label class="form-check-label" for="pref${i}">${x}</label>
-												</div>
-											</div>`).join('')}
 										</div>
 									</div>
 								</div>
@@ -144,9 +121,6 @@ window.PageAuth = {
 			</div>`;
 		},
 		mount(root){
-			const range = root.querySelector('#rBudget');
-			const out = root.querySelector('#rBudgetVal');
-			range.addEventListener('input', ()=> out.textContent = range.value);
 			const form = root.querySelector('#formRegister');
 			form.addEventListener('submit', (e)=>{
 				e.preventDefault();
