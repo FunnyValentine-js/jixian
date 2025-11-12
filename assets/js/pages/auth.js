@@ -58,12 +58,18 @@ window.PageAuth = {
 					}
 					// 登录成功后再拉取用户信息
 					const me = await API.safe(API.auth.me);
-					let name = account.includes('@') ? account.split('@')[0] : `用户${account.slice(-4)}`;
-					let user = { name, account };
-					if (me.ok && me.res?.data){
-						const d = me.res.data;
-						user = { name: d.nickname || name, account: d.phone || account, points: d.points||0, role: d.role };
+					if (!me.ok || !me.res?.data){
+						App.showToast('获取用户信息失败，请重新登录','warning');
+						return;
 					}
+					// 只有成功获取用户信息后才保存
+					const d = me.res.data;
+					const user = {
+						name: d.nickname || (account.includes('@') ? account.split('@')[0] : `用户${account.slice(-4)}`),
+						account: d.phone || account,
+						points: d.points || 0,
+						role: d.role
+					};
 					App.saveUser(user);
 					App.showToast('登录成功');
 					location.hash = '#/home';
@@ -136,14 +142,27 @@ window.PageAuth = {
 						return;
 					}
 					// 注册后尝试自动登录
-					await API.safe(API.auth.login, { phone, password: pwd, code: null });
+					const loginResult = await API.safe(API.auth.login, { phone, password: pwd, code: null });
+					if (!loginResult.ok){
+						App.showToast('注册成功，但自动登录失败，请手动登录','warning');
+						location.hash = '#/login';
+						return;
+					}
+					// 登录成功后获取用户信息
 					const me = await API.safe(API.auth.me);
-					const user = me.ok && me.res?.data ? {
-						name: me.res.data.nickname || name,
-						account: me.res.data.phone || phone,
-						points: me.res.data.points||0,
-						role: me.res.data.role
-					} : { name, account: phone };
+					if (!me.ok || !me.res?.data){
+						App.showToast('注册成功，但获取用户信息失败，请重新登录','warning');
+						location.hash = '#/login';
+						return;
+					}
+					// 只有成功获取用户信息后才保存
+					const d = me.res.data;
+					const user = {
+						name: d.nickname || name,
+						account: d.phone || phone,
+						points: d.points || 0,
+						role: d.role
+					};
 					App.saveUser(user);
 					App.showToast('注册成功，已登录');
 					location.hash = '#/home';

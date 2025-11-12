@@ -104,10 +104,18 @@
 		}
 		
 		// 默认返回结构 { code, data, msg }
+		// 检查业务状态码：code !== 0 表示业务错误（即使 HTTP 状态码是 200）
 		if (payload && typeof payload === 'object' && ('code' in payload || 'data' in payload || 'msg' in payload)){
-			// 某些文档示例 code=0 但 msg=异常，这里做宽松判断：有 data 则认为成功
-			if (payload.data !== undefined) return payload;
-			// 无 data 则也返回原始，交由上层判断
+			// 如果 code 存在且不为 0，视为业务错误
+			if ('code' in payload && payload.code !== 0 && payload.code !== null && payload.code !== undefined){
+				const errorMsg = payload.msg || `业务错误 (code: ${payload.code})`;
+				// 特殊处理 "request too much" 错误，提供更友好的提示
+				if (errorMsg.includes('too much') || errorMsg.includes('请求过多') || errorMsg.includes('request too much')){
+					throw new Error('请求过于频繁，请稍后再试');
+				}
+				throw new Error(errorMsg);
+			}
+			// code 为 0 或不存在 code 字段，返回响应
 			return payload;
 		}
 		return payload;

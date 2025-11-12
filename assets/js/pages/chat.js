@@ -180,12 +180,36 @@ window.PageChat = {
 
 		const pollPieces = async (chatId, onChunk)=>{
 			// 轮询 pieces 直到结束信号
+			let pollInterval = 400; // 初始轮询间隔（毫秒）
+			let consecutiveErrors = 0; // 连续错误计数
+			const MAX_CONSECUTIVE_ERRORS = 3; // 最大连续错误次数
+			
 			while(!stopRequested){
 				const { ok, res, msg } = await API.safe(API.robot.pieces, { chatId, limit: 64 });
 				if (!ok){
-					onChunk({ type:'error', text: msg || '获取片段失败' });
-					break;
+					consecutiveErrors++;
+					// 检查是否是限流错误
+					if (msg && (msg.includes('请求过于频繁') || msg.includes('too much') || msg.includes('请求过多'))){
+						onChunk({ type:'warn', text: '请求过于频繁，等待更长时间后重试...' });
+						// 遇到限流错误，增加等待时间（指数退避）
+						pollInterval = Math.min(pollInterval * 2, 5000); // 最大 5 秒
+						await new Promise(r=> setTimeout(r, pollInterval));
+						continue;
+					}
+					// 其他错误
+					if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS){
+						onChunk({ type:'error', text: msg || '获取片段失败，已重试多次' });
+						break;
+					}
+					// 短暂等待后重试
+					await new Promise(r=> setTimeout(r, 1000));
+					continue;
 				}
+				
+				// 请求成功，重置错误计数和轮询间隔
+				consecutiveErrors = 0;
+				pollInterval = 400;
+				
 				const arr = res?.data || [];
 				if (!Array.isArray(arr) || arr.length===0){
 					// 短暂等待后再拉取
@@ -209,13 +233,17 @@ window.PageChat = {
 					}
 				}
 				if (shouldEnd) break;
-				await new Promise(r=> setTimeout(r, 400));
+				await new Promise(r=> setTimeout(r, pollInterval));
 			}
 		};
 
 		form.addEventListener('submit', async (e)=>{
 			e.preventDefault();
-			if (isGenerating) return;
+			// 防止重复提交
+			if (isGenerating) {
+				App.showToast('正在生成中，请稍候...', 'info');
+				return;
+			}
 			const message = input.value.trim();
 			if (!message) return;
 
@@ -228,7 +256,12 @@ window.PageChat = {
 			// 发起对话，获取 chatId
 			const start = await API.safe(API.robot.chat, currentModel, message);
 			if (!start.ok){
-				App.showToast(start.msg || '提问失败','danger');
+				// 检查是否是限流错误
+				if (start.msg && (start.msg.includes('请求过于频繁') || start.msg.includes('too much'))){
+					App.showToast('请求过于频繁，请稍后再试', 'warning');
+				} else {
+					App.showToast(start.msg || '提问失败','danger');
+				}
 				setBusy(false);
 				return;
 			}

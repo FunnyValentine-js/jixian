@@ -21,7 +21,7 @@
 
 	async function guard(path){
 		// 需要登录的页面
-		const loginRequired = ['/user','/points','/feedback','/admin'];
+		const loginRequired = ['/chat','/user','/points','/feedback','/admin'];
 		if (loginRequired.includes(path)){
 			if (!isAuthed()){
 				await App.refreshUser?.();
