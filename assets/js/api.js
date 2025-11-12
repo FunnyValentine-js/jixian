@@ -32,6 +32,84 @@
 		return {};
 	}
 
+	function parseJsonPreserveBigInt(text) {
+		if (typeof text !== 'string') return text;
+		let result = '';
+		let inString = false;
+		let escapeNext = false;
+		let inNumber = false;
+		let numberBuffer = '';
+		let hasDecimalOrExponent = false;
+		for (let i = 0; i < text.length; i++) {
+			const ch = text[i];
+			if (inString) {
+				result += ch;
+				if (escapeNext) {
+					escapeNext = false;
+				} else if (ch === '\\') {
+					escapeNext = true;
+				} else if (ch === '"') {
+					inString = false;
+				}
+				continue;
+			}
+			if (inNumber) {
+				if ((ch >= '0' && ch <= '9')) {
+					numberBuffer += ch;
+					continue;
+				}
+				if (ch === '.' || ch === 'e' || ch === 'E') {
+					hasDecimalOrExponent = true;
+					numberBuffer += ch;
+					continue;
+				}
+				if ((ch === '+' || ch === '-') && numberBuffer.match(/[eE]$/)) {
+					hasDecimalOrExponent = true;
+					numberBuffer += ch;
+					continue;
+				}
+				const isNegative = numberBuffer.startsWith('-');
+				const digits = isNegative ? numberBuffer.slice(1) : numberBuffer;
+				if (!hasDecimalOrExponent && digits.length >= 16 && /^\d+$/.test(digits)) {
+					result += `"${numberBuffer}"`;
+				} else {
+					result += numberBuffer;
+				}
+				inNumber = false;
+				numberBuffer = '';
+				hasDecimalOrExponent = false;
+				i--;
+				continue;
+			}
+			if (ch === '"') {
+				inString = true;
+				result += ch;
+				continue;
+			}
+			if (ch === '-' || (ch >= '0' && ch <= '9')) {
+				inNumber = true;
+				numberBuffer = ch;
+				hasDecimalOrExponent = false;
+				continue;
+			}
+			result += ch;
+		}
+		if (inNumber) {
+			const isNegative = numberBuffer.startsWith('-');
+			const digits = isNegative ? numberBuffer.slice(1) : numberBuffer;
+			if (!hasDecimalOrExponent && digits.length >= 16 && /^\d+$/.test(digits)) {
+				result += `"${numberBuffer}"`;
+			} else {
+				result += numberBuffer;
+			}
+		}
+		try {
+			return JSON.parse(result);
+		} catch (e) {
+			return JSON.parse(text);
+		}
+	}
+
 	async function request(url, {method = 'GET', data, headers} = {}) {
 		const opts = {
 			method: method, headers: {
@@ -60,9 +138,12 @@
 		const contentType = res.headers.get('content-type') || '';
 		let payload;
 		try {
-			payload = contentType.includes('application/json') ?
-					await res.json() :
-					await res.text();
+			if (contentType.includes('application/json')) {
+				const text = await res.text();
+				payload = parseJsonPreserveBigInt(text);
+			} else {
+				payload = await res.text();
+			}
 		} catch (e) {
 			// ignore
 		}

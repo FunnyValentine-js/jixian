@@ -172,14 +172,13 @@ window.PageUser = {
 							<div class="card">
 								<div class="card-body">
 									<h2 class="h6 mb-3">安全设置</h2>
-									<div class="row g-3">
+									<div class="row g-3 align-items-end">
 										<div class="col-md-6">
 											<label class="form-label">修改密码</label>
-											<input type="password" class="form-control" placeholder="新密码">
+											<input type="password" class="form-control" id="newPassword" placeholder="输入新密码（至少6位）">
 										</div>
 										<div class="col-md-6">
-											<label class="form-label invisible">占位</label>
-											<button class="btn btn-outline-secondary w-100">提交</button>
+											<button class="btn btn-outline-secondary w-100" id="btnChangePassword">提交</button>
 										</div>
 									</div>
 								</div>
@@ -239,11 +238,29 @@ window.PageUser = {
 		setupTagPicker('#pickerBrand',{ limit: 6 });
 		setupTagPicker('#pickerModel',{ limit: 4 });
 
-		root.querySelector('#saveProfile')?.addEventListener('click', ()=>{
-			const name = root.querySelector('#pName').value.trim();
-			const user = { ...(App.state.user||{}), name };
-			App.saveUser(user);
-			App.showToast('已保存基本信息','success');
+		root.querySelector('#saveProfile')?.addEventListener('click', async ()=>{
+			const nameInput = root.querySelector('#pName');
+			if (!nameInput) return;
+			const nickname = nameInput.value.trim();
+			if (!nickname){
+				App.showToast('请输入姓名','warning');
+				return;
+			}
+			const currentName = App.state.user?.name || '';
+			if (nickname === currentName){
+				App.showToast('姓名未发生变化','info');
+				return;
+			}
+			App.showToast('正在更新个人信息...','warning');
+			// 构造请求：未修改字段置为 null
+			const payload = {nickname, password: null, phone: null};
+			const r = await API.safe(API.auth.update, payload);
+			if (r.ok){
+				App.saveUser({...(App.state.user||{}), name: nickname});
+				App.showToast('姓名已更新','success');
+			}else{
+				App.showToast(r.msg || '更新失败','danger');
+			}
 		});
 
 		// 保存购车偏好 -> /consultation-content/update
@@ -268,6 +285,29 @@ window.PageUser = {
 				App.showToast('已保存购车偏好','success');
 			}else{
 				App.showToast(r.msg || '保存失败','danger');
+			}
+		});
+
+		root.querySelector('#btnChangePassword')?.addEventListener('click', async ()=>{
+			const pwdInput = root.querySelector('#newPassword');
+			if (!pwdInput) return;
+			const pwd = pwdInput.value.trim();
+			if (!pwd){
+				App.showToast('请输入新密码','warning');
+				return;
+			}
+			if (pwd.length < 6){
+				App.showToast('密码长度至少6位','warning');
+				return;
+			}
+			App.showToast('正在修改密码...','warning');
+			const payload = {nickname: null, password: pwd, phone: null};
+			const r = await API.safe(API.auth.update, payload);
+			if (r.ok){
+				pwdInput.value = '';
+				App.showToast('密码已更新','success');
+			}else{
+				App.showToast(r.msg || '修改失败','danger');
 			}
 		});
 

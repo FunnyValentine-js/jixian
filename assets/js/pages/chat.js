@@ -35,6 +35,9 @@ window.PageChat = {
 						<div class="p-3 p-md-4">
 							<h2 class="h6">我的历史</h2>
 							<ul class="list-group list-group-flush small" id="historyList" aria-label="历史记录"></ul>
+							<nav class="mt-3" aria-label="历史分页">
+								<ul class="pagination pagination-sm mb-0" id="historyPager"></ul>
+							</nav>
 						</div>
 					</div>
 				</div>
@@ -44,6 +47,7 @@ window.PageChat = {
 	mount(root){
 		const list = root.querySelector('#chatList');
 		const historyList = root.querySelector('#historyList');
+		const historyPager = root.querySelector('#historyPager');
 		const form = root.querySelector('#chatForm');
 		const input = root.querySelector('#chatInput');
 		const btnSend = root.querySelector('#btnSend');
@@ -264,22 +268,57 @@ window.PageChat = {
 			App.showToast('已停止本次生成','warning');
 		});
 
-		// 历史记录
-		(async ()=>{
-			const { ok, res } = await API.safe(API.robot.historyMe, { limit: 10, page: 1 });
+		// 历史记录：分页加载（每页 5 条）
+		let historyPage = 1;
+		const historyLimit = 5;
+		const historyEmpty = '<li class="list-group-item text-secondary">暂无历史</li>';
+		const renderHistory = async ({resetPage = false} = {}) => {
+			if (resetPage) historyPage = 1;
+			if (historyList){
+				historyList.innerHTML = `<li class="list-group-item text-secondary text-center">${App.showLoading()}</li>`;
+			}
+			const { ok, res, msg } = await API.safe(API.robot.historyMe, { limit: historyLimit, page: historyPage });
+			let rows = [];
 			if (ok && Array.isArray(res?.data)){
-				historyList.innerHTML = res.data.map(h=>`
+				rows = res.data;
+			}else{
+				historyList.innerHTML = historyEmpty;
+				if (historyPager) historyPager.innerHTML = '';
+				if (!ok && msg) App.showToast(msg, 'danger');
+				return;
+			}
+			if (!rows.length && historyPage > 1){
+				// 如果没有数据且不在首页，自动回退一页
+				historyPage = Math.max(1, historyPage - 1);
+				return renderHistory();
+			}
+			historyList.innerHTML = rows.length ? rows.map(h=>`
 					<li class="list-group-item">
 						<div class="d-flex justify-content-between">
 							<span class="${h.formUser?'':'text-primary'}">${(h.text||'').slice(0,24)}</span>
 							<small class="text-secondary">${h.createTime||''}</small>
 						</div>
 					</li>
-				`).join('');
-			}else{
-				historyList.innerHTML = `<li class="list-group-item text-secondary">暂无历史</li>`;
+			`).join('') : historyEmpty;
+			if (historyPager){
+				const hasPrev = historyPage > 1;
+				const hasNext = rows.length === historyLimit;
+				historyPager.innerHTML = `
+					<li class="page-item ${hasPrev ? '' : 'disabled'}"><a class="page-link" href="#" data-history-page="${hasPrev ? historyPage - 1 : historyPage}">上一页</a></li>
+					<li class="page-item active"><span class="page-link">${historyPage}</span></li>
+					<li class="page-item ${hasNext ? '' : 'disabled'}"><a class="page-link" href="#" data-history-page="${hasNext ? historyPage + 1 : historyPage}">下一页</a></li>`;
 			}
-		})();
+		};
+		historyPager?.addEventListener('click', (e) => {
+			const target = e.target.closest('[data-history-page]');
+			if (!target) return;
+			e.preventDefault();
+			const page = +target.getAttribute('data-history-page');
+			if (!Number.isFinite(page) || page === historyPage) return;
+			historyPage = Math.max(1, page);
+			renderHistory();
+		});
+		renderHistory();
 
 		// 建议问题
 		suggestions?.querySelectorAll('.chip').forEach(chip=>{

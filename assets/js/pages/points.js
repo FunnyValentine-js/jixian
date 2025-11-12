@@ -6,8 +6,8 @@ window.PagePoints = {
 		const page = +(params.get('page') || 1);
 		const limit = +(params.get('limit') || 12);
 		// 积分历史分页参数
-		const historyPage = +(params.get('historyPage') || 1);
-		const historyLimit = +(params.get('historyLimit') || 20);
+		const historyPage = Math.max(1, +(params.get('historyPage') || 1));
+		const historyLimit = 5;
 
 		// 生成足量本地模拟礼物（保证≥3页）
 		const TOTAL_MOCK = 48; // 4页 * 12
@@ -104,13 +104,13 @@ window.PagePoints = {
 				</div>
 			</div>`).join('');
 		const makeLink = (p, l) => `#/points?page=${p}&limit=${l}`;
-		const makeHistoryLink = (hp, hl) => {
-			const params = new URLSearchParams(location.hash.split('?')[1] || '');
-			params.set('historyPage', hp);
-			params.set('historyLimit', hl);
-			if (page) params.set('page', page);
-			if (limit) params.set('limit', limit);
-			return `#/points?${params.toString()}`;
+		const makeHistoryLink = (hp) => {
+			const nextParams = new URLSearchParams(location.hash.split('?')[1] || '');
+			nextParams.set('historyPage', hp);
+			nextParams.set('historyLimit', historyLimit);
+			if (page) nextParams.set('page', page);
+			if (limit) nextParams.set('limit', limit);
+			return `#/points?${nextParams.toString()}`;
 		};
 		// 当使用本地模拟数据时，提供明确的分页边界（≥3页）
 		let prevDisabled = page <= 1 ? 'disabled' : '';
@@ -280,17 +280,17 @@ window.PagePoints = {
 						</table>
 					</div>
 					<nav class="mt-2" aria-label="积分历史分页">
-						<ul class="pagination pagination-sm mb-0">
+						<ul class="pagination pagination-sm mb-0" id="pointsHistoryPager">
 							<li class="page-item ${historyPrevDisabled}">
 								${historyPrevDisabled ? 
 									'<span class="page-link">上一页</span>' : 
-									`<a class="page-link" href="${makeHistoryLink(Math.max(1, historyPage - 1), historyLimit)}">上一页</a>`}
+									`<a class="page-link" href="${makeHistoryLink(Math.max(1, historyPage - 1))}" data-history-link="${makeHistoryLink(Math.max(1, historyPage - 1))}">上一页</a>`}
 							</li>
 							<li class="page-item active"><span class="page-link">${historyPage}</span></li>
 							<li class="page-item ${historyNextDisabled}">
 								${historyNextDisabled ? 
 									'<span class="page-link">下一页</span>' : 
-									`<a class="page-link" href="${makeHistoryLink(historyPage + 1, historyLimit)}">下一页</a>`}
+									`<a class="page-link" href="${makeHistoryLink(historyPage + 1)}" data-history-link="${makeHistoryLink(historyPage + 1)}">下一页</a>`}
 							</li>
 						</ul>
 					</nav>
@@ -322,10 +322,20 @@ window.PagePoints = {
 				}
 			});
 		});
+		// 积分历史分页：拦截点击并刷新哈希，确保分页生效
+		root.querySelector('#pointsHistoryPager')?.addEventListener('click', (e) => {
+			const link = e.target.closest('[data-history-link]');
+			if (!link) return;
+			e.preventDefault();
+			const target = link.getAttribute('data-history-link');
+			if (!target) return;
+			location.hash = target;
+		});
 		// 兑换
 		root.querySelectorAll('[data-gift-id]').forEach(btn => {
 			btn.addEventListener('click', async () => {
-				const id = +btn.getAttribute('data-gift-id');
+				const id = btn.getAttribute('data-gift-id');
+				if (!id) return;
 				btn.disabled = true;
 				const {ok, res, msg} = await API.safe(API.points.consume, id);
 				if (ok) {
@@ -346,7 +356,8 @@ window.PagePoints = {
 		// 详情模态
 		root.querySelectorAll('[data-detail-id]').forEach(btn => {
 			btn.addEventListener('click', async () => {
-				const id = +btn.getAttribute('data-detail-id');
+				const id = btn.getAttribute('data-detail-id');
+				if (!id) return;
 				let detail = null;
 				let errorMsg = null;
 				try {
