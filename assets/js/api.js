@@ -7,16 +7,21 @@
 	const USE_CREDENTIALS = true;
 
 	// 固定 Authorization 令牌（按需修改）
-	const FIXED_AUTHORIZATION = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ1c2VyIjoxOTg3ODMyNTc0ODU4ODMzOTIxLCJleHAiOjE3NjI5MzUzODZ9.KsDXdry5Rsle2CgUfrVfSZmw64kuTEYH3HvL9gXK15N4lixQyhYJ9zXJOfTc_XsfA-R0Z_hxVUC0TEGomB2Llq1cs1ZvV5OXQlRYV0DUeJmaleaUhB-ZT8LWV5ehMknUZ9FtGXbj9PBYkGjvcs4U29xVqWBSQQUPjiX-cV30cqriQ6EBK8Dhz9Ko_MJijfMcbOZd0yrljSqwiV1LOU-tGkkCUoNPabyO2wosBYtsoW2U3eu_oTt3vAjqFWvAweKxh5r5RaN-gern0X9f9ewxTyMXLkuL-ST6APJK5WnB6bXmkatDT5iXsGFSQRYNnYsSBzkwYy7roXp0fY6QNh9pDA';
+	const FIXED_AUTHORIZATION = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ1c2VyIjoxOTg4MTk3ODg2NTQ3NTI1NjMzLCJleHAiOjE3NjMwMDMxNDJ9.rgwNdxSDs0ehCvdnRfAhxhynefmoGDsmd1IEqtYGZmCo5t-dK4_KJ-ITd7Y4yYGxaUG6rhWVSmDIdL2fuYOSfUgDhMw8f_5tMtdWS4veGf_0VycL2FMrAN9zh9-AXpajFt5Mn5N89Weqyfo3-4g0zTamj_VSN6Ugvimf7OGA6gzRHJSvNY5KpKp7IISvMT7k5TgyuquZaofHJUNsDOVFwrmVcOBw0SxqluFALH22oB54wqkDQECVvnpoLOkajDg66g__rjdYIdvG0R7ElGR5taPL1o01Id6dE1Ae3IDrpI9DtlNNw7EFGEGIFwlqCDvqhT4P8EnvuGIo2kMpx57b9Q';
 
 	// 统一持久化 token（localStorage + cookie）
 	function persistToken(token){
 		if (!token) return;
 		try{
-			localStorage.setItem('API_TOKEN', token);
+			// 去除可能的 "Bearer " 前缀，统一存储为纯 token
+			const cleanToken = token.replace(/^Bearer\s+/i, '').trim();
+			if (!cleanToken) return;
+			localStorage.setItem('API_TOKEN', cleanToken);
 			// 简单设为 Lax，若需要跨站可改为 None; Secure（需 HTTPS）
-			document.cookie = `API_TOKEN=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
-		}catch(e){}
+			document.cookie = `API_TOKEN=${encodeURIComponent(cleanToken)}; path=/; SameSite=Lax`;
+		}catch(e){
+			console.warn('Failed to persist token:', e);
+		}
 	}
 
 	function getAuthHeaders(){
@@ -50,11 +55,27 @@
 			console.error('API error:', err);
 			throw new Error('网络请求失败，可能是跨域或网络不可达（请使用本地服务器打开前端，或在后端开启 CORS 并允许来源）');
 		}
-		// 尝试从响应头捕获并保存 Token（如果后端提供）
+		// 优先从响应头捕获并保存 Token（登录、注册、更新等操作会返回新 token）
+		// 注意：由于 CORS 限制，自定义响应头需要后端在 Access-Control-Expose-Headers 中声明
+		let tokenFromHeader = null;
 		try{
-			const hAuth = res.headers.get('authorization') || res.headers.get('Authorization') || res.headers.get('x-auth-token') || res.headers.get('X-Auth-Token');
-			if (hAuth) persistToken(hAuth);
-		}catch(e){}
+			// 尝试多种可能的响应头名称
+			tokenFromHeader = res.headers.get('authorization') 
+				|| res.headers.get('Authorization') 
+				|| res.headers.get('x-auth-token') 
+				|| res.headers.get('X-Auth-Token')
+				|| res.headers.get('token')
+				|| res.headers.get('Token');
+			if (tokenFromHeader) {
+				persistToken(tokenFromHeader);
+				console.log('[API] Token saved from response header');
+			}
+		}catch(e){
+			// CORS 限制：无法访问自定义响应头时，会在这里捕获
+			// 这种情况需要后端在 Access-Control-Expose-Headers 中添加 authorization
+			console.warn('[API] Cannot read authorization header (CORS restriction). Backend should expose it in Access-Control-Expose-Headers.');
+		}
+		
 		const contentType = res.headers.get('content-type') || '';
 		let payload = null;
 		try{
@@ -65,13 +86,25 @@
 		if (!res.ok){
 			throw new Error(typeof payload === 'string' ? payload : (payload?.msg || `HTTP ${res.status}`));
 		}
+		
+		// 如果响应头中没有 token，尝试从响应体中获取（作为备选方案）
+		if (!tokenFromHeader && payload && typeof payload === 'object'){
+			try{
+				const maybeToken = payload?.data?.token 
+					|| payload?.data?.authorization
+					|| payload?.token 
+					|| payload?.authorization;
+				if (maybeToken) {
+					persistToken(maybeToken);
+					console.log('[API] Token saved from response body');
+				}
+			}catch(e){
+				// ignore
+			}
+		}
+		
 		// 默认返回结构 { code, data, msg }
 		if (payload && typeof payload === 'object' && ('code' in payload || 'data' in payload || 'msg' in payload)){
-			// 如果 body 中返回 token，也记录
-			try{
-				const maybeToken = payload?.data?.token || payload?.token;
-				if (maybeToken) persistToken(maybeToken);
-			}catch(e){}
 			// 某些文档示例 code=0 但 msg=异常，这里做宽松判断：有 data 则认为成功
 			if (payload.data !== undefined) return payload;
 			// 无 data 则也返回原始，交由上层判断
@@ -146,7 +179,11 @@
 			me: ()=> request(`${BASE}/user/me`),
 			code: (phone)=> request(`${BASE}/user/code?phone=${encodeURIComponent(phone)}`, { method:'POST' }),
 			update: (userDto)=> request(`${BASE}/user/update`, { method:'PUT', data: userDto }),
-			getById: (id)=> request(`${BASE}/user/${id}`)
+			getById: (id)=> request(`${BASE}/user/one/${id}`),
+			pointsHistory: ({ limit=20, page=1 }={})=>{
+				const url = buildQueryPath(`${BASE}/user/points/history`, null, { limit, page });
+				return request(url);
+			}
 		},
 		robot: {
 			chat: (model='deepseek', message)=>{
@@ -188,7 +225,13 @@
 		admin: {
 			users: (page=1, limit=10)=> request(`${BASE}/admin/user/all/${clampInt(limit,1,10)}/${clampInt(page,1,1)}`),
 			userOne: (id)=> request(`${BASE}/admin/user/one/${id}`),
+			userCreate: ()=> request(`${BASE}/admin/user/create`),
+			userQuery: (queryDto)=> request(`${BASE}/admin/user/query`, { method:'POST', data: queryDto }),
 			userUpdate: (info)=> request(`${BASE}/admin/user/update`, { method:'PUT', data: info }),
+			userPointsHistory: ({ userId, limit=20, page=1 })=>{
+				const url = buildQueryPath(`${BASE}/admin/user/points/history`, userId, { limit, page });
+				return request(url);
+			},
 			consultAll: (page=1, limit=10)=> request(`${BASE}/admin/consultation/all/${clampInt(limit,1,10)}/${clampInt(page,1,1)}`),
 			consultCombineAll: (page=1, limit=10)=> request(`${BASE}/admin/consultation/combine/all/${clampInt(limit,1,10)}/${clampInt(page,1,1)}`),
 			consultCombineById: (id)=> request(`${BASE}/admin/consultation/combine/${id}`),
@@ -202,7 +245,10 @@
 				const url = buildQueryPath(`${BASE}/admin/feedback/read`, null, { timeFrom, timeTo, limit, page });
 				return request(url);
 			},
-			feedbackMarkRead: (id)=> request(`${BASE}/admin/feedback/read`, { method:'PUT', data: id }),
+			feedbackMarkRead: (id)=> {
+				// 文档说明：body里面简单的就是一个id, 不需要键值对
+				return request(`${BASE}/admin/feedback/read`, { method:'PUT', data: id });
+			},
 			feedbackByUser: ({ userId, read=false, limit=20, page=1 })=>{
 				const url = buildQueryPath(`${BASE}/admin/feedback/user`, userId, { read, limit, page });
 				return request(url);
