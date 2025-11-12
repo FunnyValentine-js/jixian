@@ -31,7 +31,7 @@
 			if (t) return { authorization: t.startsWith('Bearer ') ? t : `Bearer ${t}` };
 		}catch(e){}
 		// 若本地没有，则回退使用固定令牌
-		if (FIXED_AUTHORIZATION) return { authorization: `Bearer ${FIXED_AUTHORIZATION}` };
+		//if (FIXED_AUTHORIZATION) return { authorization: `Bearer ${FIXED_AUTHORIZATION}` };
 		return {};
 	}
 
