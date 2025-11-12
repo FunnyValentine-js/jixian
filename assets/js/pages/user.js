@@ -146,20 +146,7 @@ window.PageUser = {
 							<div class="card">
 								<div class="card-body">
 									<h2 class="h6 mb-3">咨询记录</h2>
-									<div class="table-responsive">
-										<table class="table table-hover align-middle stackable">
-											<thead><tr><th>时间</th><th>预算</th><th>燃料</th><th>操作</th></tr></thead>
-											<tbody>
-												${[1,2,3].map(i=>`
-												<tr>
-													<td data-label="时间">2025-06-0${i}</td>
-													<td data-label="预算">20-30万</td>
-													<td data-label="燃料">混动</td>
-													<td data-label="操作"><button class="btn btn-sm btn-outline-secondary">查看</button></td>
-												</tr>`).join('')}
-											</tbody>
-										</table>
-									</div>
+									<ul class="list-group list-group-flush small" id="historyList" aria-label="历史记录"></ul>
 								</div>
 							</div>
 						</div>
@@ -283,6 +270,25 @@ window.PageUser = {
 				App.showToast(r.msg || '保存失败','danger');
 			}
 		});
+
+		// 咨询记录 - 使用和智能对话相同的 API 和样式
+		(async ()=>{
+			const historyList = root.querySelector('#historyList');
+			if (!historyList) return;
+			const { ok, res } = await API.safe(API.robot.historyMe, { limit: 10, page: 1 });
+			if (ok && Array.isArray(res?.data)){
+				historyList.innerHTML = res.data.map(h=>`
+					<li class="list-group-item">
+						<div class="d-flex justify-content-between">
+							<span class="${h.formUser?'':'text-primary'}">${(h.text||'').slice(0,24)}</span>
+							<small class="text-secondary">${h.createTime||''}</small>
+						</div>
+					</li>
+				`).join('');
+			}else{
+				historyList.innerHTML = `<li class="list-group-item text-secondary">暂无历史</li>`;
+			}
+		})();
 	}
 };
 
